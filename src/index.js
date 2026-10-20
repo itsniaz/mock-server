@@ -1,12 +1,34 @@
 import { DurableObject } from "cloudflare:workers";
 
 const MAX_ENDPOINTS = 3;
+const MAX_LOGS = 100; // per endpoint
+const MAX_LOG_BODY = 4096;
+const REDACT = new Set(["authorization", "cookie", "proxy-authorization", "x-api-key"]);
 const SLUG = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const RESERVED = new Set(["api", "login"]);
 
 // Endpoints, their live responses and samples live in one Durable Object: strongly consistent, so a deploy
 // is served instantly. (KV caches reads at the edge for ~60s, which made /mock lag behind the UI.)
 export class Store extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT NOT NULL, data TEXT NOT NULL)");
+  }
+
+  addLog(slug, entry) {
+    const sql = this.ctx.storage.sql;
+    sql.exec("INSERT INTO logs (slug, data) VALUES (?, ?)", slug, JSON.stringify(entry));
+    sql.exec("DELETE FROM logs WHERE slug = ? AND id NOT IN (SELECT id FROM logs WHERE slug = ? ORDER BY id DESC LIMIT ?)", slug, slug, MAX_LOGS);
+  }
+
+  getLogs(slug) {
+    return this.ctx.storage.sql.exec("SELECT id, data FROM logs WHERE slug = ? ORDER BY id DESC", slug).toArray().map((r) => ({ id: r.id, ...JSON.parse(r.data) }));
+  }
+
+  clearLogs(slug) {
+    this.ctx.storage.sql.exec("DELETE FROM logs WHERE slug = ?", slug);
+  }
+
   get(key) { return this.ctx.storage.get(key); }
   put(key, value) { return this.ctx.storage.put(key, value); }
 
@@ -26,11 +48,37 @@ export class Store extends DurableObject {
     const next = list.filter((e) => e.slug !== slug);
     await this.ctx.storage.put("endpoints", next);
     await this.ctx.storage.delete([`active:${slug}`, `samples:${slug}`]);
+    this.clearLogs(slug);
     return { list: next };
   }
 }
 
 const defaultFor = (slug) => ({ method: "ANY", status: 200, body: { message: `mock endpoint /${slug} is up` } });
+
+// One request-log entry. Credentials are redacted: the log is readable by anyone with the PIN.
+async function logEntry(req, status) {
+  const url = new URL(req.url);
+  const headers = {};
+  for (const [k, v] of req.headers) {
+    if (k.startsWith("cf-") || k === "x-real-ip" || k === "x-forwarded-proto") continue; // Cloudflare plumbing
+    headers[k] = REDACT.has(k) ? "[redacted]" : v;
+  }
+  let body = "";
+  if (req.body) body = await req.text().catch(() => "");
+  return {
+    at: Date.now(),
+    method: req.method,
+    path: url.pathname + url.search,
+    status,
+    ip: req.headers.get("CF-Connecting-IP") ?? "",
+    country: req.cf?.country ?? "",
+    ua: req.headers.get("User-Agent") ?? "",
+    headers,
+    body: body.slice(0, MAX_LOG_BODY),
+    bodyTruncated: body.length > MAX_LOG_BODY,
+    bodySize: body.length,
+  };
+}
 
 async function getEndpoints(store, env) {
   let list = await store.get("endpoints");
@@ -115,7 +163,7 @@ async function login(req, env, store) {
 }
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const { pathname } = new URL(req.url);
     const store = env.STORE.get(env.STORE.idFromName("main"));
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -125,7 +173,10 @@ export default {
     const first = pathname.split("/")[1];
     if (endpoints.some((e) => e.slug === first)) {
       const { method = "ANY", status, body } = (await store.get(`active:${first}`)) ?? defaultFor(first);
-      if (method !== "ANY" && req.method !== method) {
+      const allowed = method === "ANY" || req.method === method;
+      // Logged after the response is sent, so it never slows the mock down.
+      ctx.waitUntil(logEntry(req, allowed ? status : 405).then((entry) => store.addLog(first, entry)));
+      if (!allowed) {
         return Response.json({ error: `Method ${req.method} not allowed, expected ${method}` }, { status: 405, headers: { ...CORS, Allow: method } });
       }
       if (NO_BODY.has(status)) return new Response(null, { status, headers: CORS });
@@ -156,7 +207,7 @@ export default {
 
     // Old single-endpoint paths (/api/active, /api/samples) map to the "mock" endpoint so existing scripts keep working.
     const path = pathname.replace(/^\/api\/(active|samples)(?=\/|$)/, "/api/endpoints/mock/$1");
-    const m = path.match(/^\/api\/endpoints\/([^/]+)(?:\/(active|samples)(?:\/(.+))?)?$/);
+    const m = path.match(/^\/api\/endpoints\/([^/]+)(?:\/(active|samples|logs)(?:\/(.+))?)?$/);
     if (!m) return error("Not found", 404);
     const [, slug, part, rest] = m;
     if (!endpoints.some((e) => e.slug === slug)) return error("Endpoint not found", 404);
@@ -177,6 +228,12 @@ export default {
         await store.put(`active:${slug}`, live);
         return json(live);
       }
+      return error("Method not allowed", 405);
+    }
+
+    if (part === "logs" && !rest) {
+      if (req.method === "GET") return json(await store.getLogs(slug));
+      if (req.method === "DELETE") { await store.clearLogs(slug); return json([]); }
       return error("Method not allowed", 405);
     }
 

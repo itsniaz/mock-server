@@ -35,7 +35,7 @@ A tool for developers and QA to control what a single mock API endpoint returns.
 ### 4.2 Compose a response
 - **Method:** ANY (default), GET, POST, PUT, PATCH or DELETE. ANY answers every method; otherwise other methods get `405`.
 - **Status code:** 200–599, with one-click shortcuts for common codes (200, 201, 400, 401, 403, 404, 500, 503).
-- **Body:** a JSON editor large enough for realistic payloads. Empty means no body.
+- **Body:** a JSON editor with line numbers, large enough for realistic payloads and resizable by the user. Long payloads scroll inside the editor (line numbers stay aligned); they never stretch the page. Empty means no body.
 - **Format:** pretty-print the JSON. Invalid JSON shows a clear error and changes nothing.
 
 ### 4.3 Deploy
@@ -61,6 +61,14 @@ A tool for developers and QA to control what a single mock API endpoint returns.
   - **Deploy** it directly, running the same deploy flow as 4.3.
   - **Delete** it, after confirmation.
 - Show a helpful empty state when there are no samples.
+
+### 4.5a Request log
+- Each endpoint keeps its **latest 100 requests**; older ones are dropped automatically.
+- For each request show: time, method, path (with query), the status that was served (including `405` for a wrong method), client IP and country, and client type (from the user agent).
+- Expanding a request shows its headers and body (JSON pretty-printed; bodies over 4 KB are cut, with the original size shown).
+- Credentials are never shown: `Authorization`, `Cookie`, `Proxy-Authorization` and `X-API-Key` values are redacted.
+- The log refreshes automatically (can be turned off) and highlights new requests; there is a manual refresh and a **Clear** (with confirmation).
+- Empty state tells the user which URL to call.
 
 ### 4.6 Feedback
 - Every action gets brief feedback (saved, formatted, copied, deployed, deleted).

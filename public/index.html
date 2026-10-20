@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Server</title>
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark"; } catch {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root, [data-theme="dark"] { color-scheme: dark; --bg: #0F0F12; --surface: #17171C; --surface-2: #1E1E25; --border: #2A2A33; --border-strong: #3A3A45; --text: #ECECF1; --muted: #A3A3AF; --accent: #5B55F0; --accent-soft: #25234A; --accent-text: #B4B1FF; --on-accent: #FFFFFF; --ok: #4ADE80; --ok-soft: #13291B; --warn: #FBBF24; --warn-soft: #2E240C; --err: #F87171; --err-soft: #361818; --inverse: #ECECF1; --on-inverse: #17171C; --shadow: rgba(0,0,0,.45); }
+  [data-theme="light"] { color-scheme: light; --bg: #F6F6F7; --surface: #FFFFFF; --surface-2: #F2F2F4; --border: #E3E3E8; --border-strong: #C9C9D1; --text: #18181B; --muted: #5E5E69; --accent: #4338CA; --accent-soft: #EEEDFD; --accent-text: #3730A3; --on-accent: #FFFFFF; --ok: #157F3B; --ok-soft: #E9F7EE; --warn: #9A4A00; --warn-soft: #FFF4E0; --err: #B42318; --err-soft: #FDEDEC; --inverse: #18181B; --on-inverse: #FAFAFA; --shadow: rgba(20,20,30,.2); }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px/1.45 'Inter', system-ui, sans-serif; }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn:disabled { color: var(--muted); }
+  .btn.sm { height: 32px; padding: 0 10px; border-radius: 7px; }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ghost:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; }
+  .btn.soft { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+  .btn.soft:disabled { border-color: var(--border-strong); background: transparent; color: var(--muted); }
+  .btn.ok { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+  .btn.danger { border: 0; background: var(--err); color: #fff; font-weight: 600; }
+  .icon-btn { width: 32px; padding: 0; color: var(--muted); }
+  .deploy { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 200px; height: 52px; padding: 0 28px; border: 0; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 650; letter-spacing: .01em; box-shadow: 0 1px 2px rgba(20,20,40,.18), 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .deploy:hover:not(:disabled) { filter: brightness(1.08); }
+  .deploy:disabled { opacity: .75; cursor: progress; }
+  .spin { animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Pills & tags */
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.busy { background: var(--accent-soft); color: var(--accent-text); }
+  .pill.err { background: var(--err-soft); color: var(--err); }
+  .tag { padding: 2px 7px; border-radius: 5px; background: var(--surface-2); font: 600 11px 'JetBrains Mono', monospace; }
+  .tag.s2 { background: var(--ok-soft); color: var(--ok); }
+  .tag.s3, .tag.s4 { background: var(--warn-soft); color: var(--warn); }
+  .tag.s5 { background: var(--err-soft); color: var(--err); }
+  .tag.live { display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--ok); color: var(--ok); font-family: 'Inter', sans-serif; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+  .tag.live .dot { width: 6px; height: 6px; }
+
+  /* Header */
+  header { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .header-in { max-width: 1280px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; }
+  .logo { width: 32px; height: 32px; border-radius: 8px; background: var(--inverse); color: var(--on-inverse); display: flex; align-items: center; justify-content: center; }
+  .endpoint { flex: 1 1 420px; min-width: 0; display: flex; align-items: center; gap: 8px; }
+  .endpoint input { flex: 1 1 auto; min-width: 0; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+  .endpoint input.copied { border-color: var(--ok); background: var(--ok-soft); }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .live-pill { height: 32px; font-size: 13px; }
+
+  /* Endpoint bar */
+  .ep-bar { max-width: 1280px; width: 100%; margin: 0 auto; padding: 20px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .ep-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ep-tab { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font: 600 13px 'JetBrains Mono', monospace; }
+  .ep-tab:hover { border-color: var(--border-strong); color: var(--text); }
+  .ep-tab[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+  .ep-tab .tag { font-size: 10.5px; }
+  .ep-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+  .new-ep-row { display: flex; align-items: center; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+  .new-ep-row span { padding: 0 4px 0 12px; color: var(--muted); font: 13px 'JetBrains Mono', monospace; white-space: nowrap; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+  .new-ep-row input { flex: 1; min-width: 0; height: 40px; padding: 0 12px 0 0; border: 0; background: transparent; font: 600 14px 'JetBrains Mono', monospace; }
+  .new-ep-row input:focus-visible { outline: none; }
+  .new-ep-row:focus-within { border-color: var(--accent); }
+  .new-ep-row.invalid { border: 2px solid var(--err); }
+  dialog .field-error { margin: -8px 0 16px; }
+
+  /* Layout */
+  main { flex: 1 0 auto; width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; min-width: 0; }
+  .compose { flex: 999 1 560px; overflow: hidden; }
+  aside { flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+  h2 { margin: 0; font-size: 16px; font-weight: 650; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+
+  /* Compose */
+  .compose-body { padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 22px; }
+  .compose-body h2 { font-size: 17px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+  fieldset:disabled .dimmable { opacity: .7; }
+  .group { display: flex; flex-direction: column; gap: 8px; }
+  .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 10px; }
+  .seg button { height: 32px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font: 600 12px 'JetBrains Mono', monospace; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: 0 1px 2px var(--shadow), 0 0 0 1px var(--border); }
+  [data-theme="dark"] .seg button[aria-pressed="true"] { background: var(--border-strong); box-shadow: none; }
+  #status { width: 96px; height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); font: 600 14px 'JetBrains Mono', monospace; }
+  #status[aria-invalid="true"] { border: 2px solid var(--err); }
+  #reason { font-size: 13px; color: var(--muted); min-width: 64px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font: 500 12px 'JetBrains Mono', monospace; }
+  .chips button[aria-pressed="true"] { padding-left: 8px; border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+  .chips button:not([aria-pressed="true"]) svg { display: none; }
+  .field-error { display: flex; align-items: flex-start; gap: 6px; color: var(--err); font-size: 13px; font-weight: 500; }
+  .field-error svg { flex: none; margin-top: 1px; }
+  .json-state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
+  .json-state.ok { color: var(--ok); }
+  .json-state.err { color: var(--err); }
+  .editor { display: flex; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+  .editor.invalid { border: 2px solid var(--err); }
+  #gutter { padding: 12px 10px 12px 14px; min-width: 44px; text-align: right; color: var(--muted); font: 13px/21px 'JetBrains Mono', monospace; white-space: pre; border-right: 1px solid var(--border); background: var(--surface); overflow: hidden; user-select: none; }
+  #body { flex: 1 1 auto; min-width: 0; height: 360px; margin: 0; padding: 12px 16px; border: 0; resize: vertical; background: transparent; font: 13px/21px 'JetBrains Mono', monospace; white-space: pre; overflow: auto; }
+  #body:focus-visible { outline: none; }
+  .editor:focus-within { border-color: var(--accent); }
+
+  /* Action bar */
+  .actions { border-top: 1px solid var(--border); background: var(--surface-2); padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; }
+  .save-group { flex: 1 1 320px; min-width: 0; max-width: 460px; display: flex; flex-direction: column; gap: 6px; }
+  .save-row { display: flex; gap: 8px; }
+  .save-row input { flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); }
+  .save-row .btn { height: 40px; }
+  .progress-group { flex: 1 1 360px; min-width: 0; max-width: 520px; display: flex; flex-direction: column; gap: 10px; align-self: center; }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+  .steps li { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+  .steps li.done svg { color: var(--ok); }
+  .steps li.current { color: var(--text); font-weight: 650; }
+  .steps li.current svg { color: var(--accent-text); }
+  .steps li.todo svg { visibility: hidden; }
+  .bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .bar div { height: 100%; width: 0; border-radius: 3px; background: var(--accent); }
+  .bar.run div { animation: fill 2s linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+  .deploy-group { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+  /* Live card */
+  .live-card { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .live-card h2 { display: flex; align-items: center; gap: 8px; }
+  .live-card h2 .dot { box-shadow: 0 0 0 4px var(--ok-soft); }
+  .facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .facts div { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); }
+  .facts dt { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .facts dd { margin: 2px 0 0; font: 600 14px 'JetBrains Mono', monospace; }
+  pre { margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); font: 12.5px/20px 'JetBrains Mono', monospace; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-word; }
+  .result { border: 1px solid var(--ok); background: var(--ok-soft); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .result.fail { border-color: var(--err); background: var(--err-soft); }
+  .verdict { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 650; font-size: 13px; }
+  .result.fail .verdict { color: var(--err); }
+  .result pre { background: var(--surface); padding: 10px 12px; font-size: 12px; line-height: 19px; border-radius: 6px; }
+  .result dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  .result dt { color: var(--muted); }
+  .result dd { margin: 0; font-family: 'JetBrains Mono', monospace; }
+  .result dd.bad { color: var(--err); font-weight: 600; }
+
+  /* Samples */
+  .samples-card { padding: 20px 20px 8px; display: flex; flex-direction: column; gap: 8px; }
+  #samples { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  #samples li { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .s-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .s-tags, .s-actions { display: flex; align-items: center; gap: 6px; }
+  .s-actions { gap: 4px; }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 4px 0 12px; padding: 24px 12px; border: 1px dashed var(--border-strong); border-radius: 12px; text-align: center; }
+  .empty-icon { width: 44px; height: 44px; border-radius: 50%; background: var(--surface-2); color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .empty p { margin: 0; }
+
+  /* Toast, dialog, footer */
+  #toast { position: fixed; right: 24px; bottom: 24px; z-index: 10; max-width: min(440px, calc(100vw - 32px)); display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: 10px; background: var(--inverse); color: var(--on-inverse); font-size: 13px; font-weight: 500; box-shadow: 0 10px 28px var(--shadow); }
+  #toast svg { flex: none; margin-top: 1px; color: #22A04B; }
+  #toast.error { background: var(--err-soft); color: var(--err); border: 1px solid var(--err); }
+  #toast.error svg { color: currentColor; }
+  @media (max-width: 640px) { #toast { left: 16px; right: 16px; bottom: 16px; } }
+  dialog { width: min(360px, calc(100vw - 32px)); padding: 20px; border: 0; border-radius: 14px; background: var(--surface); color: var(--text); box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+  dialog::backdrop { background: rgba(10,10,14,.55); }
+  dialog h3 { margin: 0 0 12px; font-size: 16px; font-weight: 650; }
+  dialog p { margin: 0 0 16px; font-size: 13px; color: var(--muted); word-break: break-word; }
+  dialog form { display: flex; justify-content: flex-end; gap: 8px; }
+  dialog .btn { height: 40px; padding: 0 16px; }
+  footer { padding: 20px 24px 28px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    .header-in, main, .ep-bar { padding-left: 16px; padding-right: 16px; }
+    .ep-tools { margin-left: 0; }
+    .compose-body, .actions { padding-left: 16px; padding-right: 16px; }
+    .deploy-group, .deploy { width: 100%; align-items: stretch; }
+    #body { height: 260px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spin, .bar.run div { animation: none; } .bar.run div { width: 100%; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-in">
+    <div class="brand">
+      <div class="logo"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/></svg></div>
+      Mock Server
+    </div>
+    <div class="endpoint">
+      <label for="url" class="label">Endpoint</label>
+      <input id="url" class="mono" readonly>
+      <button id="copy" class="btn" type="button"></button>
+    </div>
+    <div class="header-right">
+      <span id="live-pill" class="pill ok live-pill"><span class="dot" aria-hidden="true"></span>Live <span id="live-pill-text" class="mono" style="font-size:12px"></span></span>
+      <button id="theme" class="btn icon-btn" type="button" style="width:36px"></button>
+    </div>
+  </div>
+</header>
+
+<nav class="ep-bar" aria-label="Endpoints">
+  <span class="label">Endpoints</span>
+  <div class="ep-tabs" id="ep-tabs"></div>
+  <div class="ep-tools">
+    <span class="hint" id="ep-count"></span>
+    <button id="ep-new" class="btn" type="button">
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New endpoint
+    </button>
+    <button id="ep-delete" class="btn icon-btn" type="button" style="width:36px"></button>
+  </div>
+</nav>
+
+<main>
+  <section class="card compose" aria-labelledby="compose-title" id="compose">
+    <div class="compose-body">
+      <div class="card-head">
+        <h2 id="compose-title">Compose response</h2>
+        <span id="compose-state" class="pill" role="status"></span>
+      </div>
+
+      <fieldset id="fields">
+        <div class="group dimmable" role="group" aria-labelledby="method-label">
+          <span id="method-label" class="label">Method</span>
+          <div class="wrap">
+            <div class="seg" id="methods"></div>
+            <span class="hint" id="method-hint"></span>
+          </div>
+        </div>
+
+        <div class="group dimmable">
+          <label for="status" class="label">Status code</label>
+          <div class="wrap">
+            <div class="wrap" style="gap:10px">
+              <input id="status" type="number" min="200" max="599" aria-describedby="status-error">
+              <span id="reason"></span>
+            </div>
+            <div class="chips" id="chips" role="group" aria-label="Common status codes"></div>
+          </div>
+          <span id="status-error" class="field-error" hidden></span>
+        </div>
+
+        <div class="group">
+          <div class="card-head">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <label for="body" class="label">Body · JSON</label>
+              <span class="hint">Leave empty for no body</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <span id="json-state" class="json-state"></span>
+              <button id="format" class="btn sm" type="button" style="height:32px">
+                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16"/><path d="M8 10h12"/><path d="M8 14h12"/><path d="M4 18h16"/></svg>
+                Format
+              </button>
+            </div>
+          </div>
+          <div class="editor" id="editor">
+            <div id="gutter" aria-hidden="true">1</div>
+            <textarea id="body" spellcheck="false" wrap="off" aria-describedby="json-error" placeholder='{ "hello": "world" }'></textarea>
+          </div>
+          <span id="json-error" class="field-error" hidden></span>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="actions">
+      <div class="save-group" id="save-group">
+        <label for="name" class="label">Save as sample</label>
+        <div class="save-row">
+          <input id="name" type="text" placeholder="e.g. Order created" maxlength="100">
+          <button id="save" class="btn" type="button">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16l-6-4-6 4z"/></svg>
+            Save sample
+          </button>
+        </div>
+        <span class="hint">Saving with an existing name overwrites it.</span>
+      </div>
+
+      <div class="progress-group" id="progress-group" role="status" aria-live="polite" hidden>
+        <ol class="steps" id="steps"></ol>
+        <div class="bar" id="bar" aria-hidden="true"><div></div></div>
+        <span class="hint" id="step-hint"></span>
+      </div>
+
+      <div class="deploy-group">
+        <button id="deploy" class="deploy" type="button"></button>
+        <span class="hint" id="deploy-hint">Ctrl / ⌘ + Enter</span>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <section class="card live-card" aria-labelledby="live-title">
+      <div class="card-head">
+        <h2 id="live-title"><span class="dot" aria-hidden="true"></span>Live now</h2>
+        <span class="hint" id="deployed-ago"></span>
+      </div>
+      <dl class="facts">
+        <div><dt>Method</dt><dd id="live-method"></dd></div>
+        <div><dt>Status</dt><dd id="live-status"></dd></div>
+      </dl>
+      <pre id="live-body" aria-label="Live body"></pre>
+      <div class="wrap" style="gap:10px">
+        <button id="test" class="btn" type="button">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10-6.5z"/></svg>
+          Test endpoint
+        </button>
+        <span class="hint" id="test-hint">ANY is tested as GET</span>
+      </div>
+      <div id="result" class="result" role="status" hidden></div>
+    </section>
+
+    <section class="card samples-card" aria-labelledby="samples-title">
+      <div class="card-head">
+        <h2 id="samples-title">Samples</h2>
+        <span class="hint" id="samples-count"></span>
+      </div>
+      <ul id="samples"></ul>
+    </section>
+  </aside>
+</main>
+
+<div id="toast" role="status" hidden></div>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h3 id="confirm-title"></h3>
+  <p id="confirm-text"></p>
+  <form method="dialog">
+    <button class="btn" value="cancel" autofocus>Cancel</button>
+    <button class="btn danger" value="ok" id="confirm-ok"></button>
+  </form>
+</dialog>
+
+<dialog id="new-ep" aria-labelledby="new-ep-title">
+  <h3 id="new-ep-title">New endpoint</h3>
+  <p>Gets its own live response and samples. <span id="new-ep-left"></span></p>
+  <form id="new-ep-form" method="dialog" style="flex-direction:column;align-items:stretch;gap:16px">
+    <div class="group">
+      <label for="new-ep-slug" class="label">Path</label>
+      <div class="new-ep-row" id="new-ep-row"><span id="new-ep-prefix"></span><input id="new-ep-slug" maxlength="32" autocomplete="off" spellcheck="false" placeholder="payments" aria-describedby="new-ep-hint new-ep-error"></div>
+      <span class="hint" id="new-ep-hint">Lowercase letters, digits and dashes.</span>
+    </div>
+    <span id="new-ep-error" class="field-error" role="alert" hidden></span>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" type="button" id="new-ep-cancel">Cancel</button>
+      <button class="btn soft" type="submit" id="new-ep-create" style="height:40px;padding:0 16px">Create endpoint</button>
+    </div>
+  </form>
+</dialog>
+
+<footer>Built with ❤️ by Niaz</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const svg = (paths, size = 16, sw = 2) => `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+const ICON = {
+  check: (s = 15) => svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', s, 2.6),
+  x: (s = 16) => svg('<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>', s, 2.2),
+  pass: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>', 16, 2.4),
+  warn: (s = 14) => svg('<path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.5v.01"/>', s, 2.2),
+  spin: (s = 14) => svg('<path d="M12 3a9 9 0 1 0 9 9"/>', s, 2.4).replace("<svg", '<svg class="spin"'),
+  up: (s = 20) => svg('<path d="M12 20V8"/><path d="M6.5 13.5L12 8l5.5 5.5"/><path d="M5 4h14"/>', s, 2.2),
+  load: svg('<path d="M12 4v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>', 14),
+  trash: svg('<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 13h9l1-13"/>', 16),
+  copy: svg('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>', 16),
+  bookmark: svg('<path d="M6 4h12v16l-6-4-6 4z"/>', 20),
+  sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>', 18),
+  moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>', 18),
+};
+const METHODS = ["ANY", "GET", "POST", "PUT", "PATCH", "DELETE"];
+const CODES = [200, 201, 400, 401, 403, 404, 500, 503];
+const NO_BODY = [204, 205, 304];
+const REASONS = { 200: "OK", 201: "Created", 202: "Accepted", 204: "No Content", 301: "Moved Permanently", 302: "Found", 304: "Not Modified", 400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 409: "Conflict", 410: "Gone", 422: "Unprocessable Entity", 429: "Too Many Requests", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout" };
+const STEPS = ["Validating", "Deploying", "Going live"];
+
+const MAX_ENDPOINTS = 3;
+let endpoints = [];   // [{ slug, createdAt, live }]
+let ep = null;        // slug of the endpoint being edited
+const epUrl = (slug = ep) => `${location.origin}/${slug}`;
+const base = (slug = ep) => `/api/endpoints/${encodeURIComponent(slug)}`;
+let live = null;
+let method = "ANY";
+let busy = false;
+
+async function api(path, verb = "GET", data) {
+  const r = await fetch(path, { method: verb, headers: { "Content-Type": "application/json" }, body: data && JSON.stringify(data) });
+  if (r.status === 401) location.replace("/login");
+  const out = await r.json();
+  if (!r.ok) throw new Error(out.error || r.statusText);
+  return out;
+}
+
+let toastTimer;
+function toast(text, isError) {
+  const t = $("toast");
+  t.className = isError ? "error" : "";
+  t.setAttribute("role", isError ? "alert" : "status");
+  t.innerHTML = isError ? ICON.warn(16) : ICON.check(16);
+  t.append(document.createTextNode(text));
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), isError ? 6000 : 3500);
+}
+
+const sameResp = (a, b) => !!a && !!b && JSON.stringify([a.method || "ANY", a.status, a.body ?? null]) === JSON.stringify([b.method || "ANY", b.status, b.body ?? null]);
+const statusClass = (s) => "s" + String(s)[0];
+const reason = (s) => REASONS[s] || "";
+
+// ---------- Editor ----------
+
+// Reads the editor; returns { value } or { error, field }.
+function readEditor() {
+  const status = Number($("status").value);
+  if (!Number.isInteger(status) || status < 200 || status > 599) return { error: "Use a code from 200 to 599.", field: "status" };
+  const text = $("body").value.trim();
+  try {
+    return { value: { method, status, body: text ? JSON.parse(text) : null } };
+  } catch (e) {
+    return { error: "Invalid JSON: " + e.message, field: "body" };
+  }
+}
+
+function fill({ method: m = "ANY", status, body }) {
+  method = m;
+  $("status").value = status;
+  $("body").value = body === null || body === undefined ? "" : JSON.stringify(body, null, 2);
+  refresh();
+}
+
+// Re-derives every editor-dependent piece of UI.
+function refresh() {
+  for (const b of $("methods").children) b.setAttribute("aria-pressed", b.dataset.m === method);
+  $("method-hint").textContent = method === "ANY" ? "Answers every method" : "Other methods get 405";
+
+  const status = Number($("status").value);
+  const statusOk = Number.isInteger(status) && status >= 200 && status <= 599;
+  $("reason").textContent = statusOk ? reason(status) : "";
+  $("status").setAttribute("aria-invalid", !statusOk);
+  setError("status-error", statusOk ? "" : "Use a code from 200 to 599. Nothing will be deployed.");
+  for (const b of $("chips").children) b.setAttribute("aria-pressed", Number(b.dataset.code) === status);
+
+  const text = $("body").value.trim();
+  let jsonErr = "";
+  if (text) try { JSON.parse(text); } catch (e) { jsonErr = e.message; }
+  const js = $("json-state");
+  js.className = "json-state " + (jsonErr ? "err" : "ok");
+  js.innerHTML = jsonErr ? ICON.x(14) + "Invalid JSON" : text ? ICON.check(14) + "Valid JSON" : "";
+  $("editor").classList.toggle("invalid", !!jsonErr);
+  $("body").setAttribute("aria-invalid", !!jsonErr);
+  setError("json-error", jsonErr && "Invalid JSON: " + jsonErr);
+
+  const lines = $("body").value.split("\n").length;
+  $("gutter").textContent = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
+
+  const st = $("compose-state");
+  const r = readEditor();
+  if (busy) { st.className = "pill busy"; st.innerHTML = ICON.spin() + "Deploying · editing paused"; }
+  else if (r.error) { st.className = "pill err"; st.innerHTML = ICON.warn() + "Fix errors before deploying"; }
+  else if (!sameResp(r.value, live)) { st.className = "pill warn"; st.innerHTML = ICON.warn() + "Not deployed · edits differ from live"; }
+  else { st.className = "pill ok"; st.innerHTML = ICON.check(13) + "All changes live"; }
+}
+
+function setError(id, text) {
+  const el = $(id);
+  el.hidden = !text;
+  el.innerHTML = text ? ICON.x(15) : "";
+  if (text) el.append(document.createTextNode(text));
+}
+
+// ---------- Live ----------
+
+function showLive(resp) {
+  live = { method: "ANY", ...resp };
+  const e = endpoints.find((x) => x.slug === ep);
+  if (e) { e.live = live; renderEndpoints(); }
+  $("live-pill-text").textContent = `${live.method} · ${live.status}`;
+  $("live-method").textContent = live.method;
+  $("live-status").textContent = `${live.status} ${reason(live.status)}`.trim();
+  $("live-body").textContent = live.body === null || live.body === undefined ? "(empty body)" : JSON.stringify(live.body, null, 2);
+  $("test-hint").textContent = live.method === "ANY" ? "ANY is tested as GET" : `Tested as ${live.method}`;
+  updateAgo();
+  refresh();
+  if (lastSamples) showSamples(lastSamples);
+}
+
+function updateAgo() {
+  if (!live?.deployedAt) { $("deployed-ago").textContent = ""; return; }
+  const s = Math.round((Date.now() - live.deployedAt) / 1000);
+  $("deployed-ago").textContent = "Deployed " + (s < 45 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`);
+}
+setInterval(updateAgo, 30000);
+
+// Calls the real mock endpoint and checks it serves what the UI says is live.
+async function testEndpoint() {
+  const verb = live.method === "ANY" ? "GET" : live.method;
+  const r = await fetch("/" + ep, { method: verb, cache: "no-store" });
+  const text = await r.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  const expected = NO_BODY.includes(live.status) ? null : live.body ?? null;
+  const ok = r.status === live.status && JSON.stringify(body) === JSON.stringify(expected);
+
+  const box = $("result");
+  box.hidden = false;
+  box.className = "result" + (ok ? "" : " fail");
+  box.setAttribute("role", ok ? "status" : "alert");
+  box.innerHTML = `<div class="card-head"><span class="verdict">${ok ? ICON.pass : ICON.x()}<span></span></span><span class="hint mono"></span></div>`;
+  box.querySelector(".verdict span").textContent = ok ? "Pass · matches live" : "Fail · response differs from live";
+  box.querySelector(".hint").textContent = `${verb} → ${r.status}`;
+  if (!ok) {
+    const dl = document.createElement("dl");
+    dl.innerHTML = `<dt>Expected</dt><dd></dd><dt>Received</dt><dd class="bad"></dd>`;
+    dl.children[1].textContent = `${verb} · ${live.status}`;
+    dl.children[3].textContent = `${verb} · ${r.status}`;
+    box.append(dl);
+  }
+  const pre = document.createElement("pre");
+  pre.textContent = `HTTP/1.1 ${r.status} ${reason(r.status)}\ncontent-type: ${r.headers.get("content-type") || "—"}\n\n${text || "(empty body)"}`;
+  box.append(pre);
+  return ok;
+}
+
+// ---------- Deploy ----------
+
+function setDeploying(on) {
+  busy = on;
+  $("fields").disabled = on;
+  $("compose").setAttribute("aria-busy", on);
+  $("save-group").hidden = on;
+  $("progress-group").hidden = !on;
+  $("deploy").disabled = on;
+  $("test").disabled = on;
+  $("deploy-hint").textContent = on ? "Deploy is locked until this finishes" : "Ctrl / ⌘ + Enter";
+  document.querySelectorAll("#samples button, .ep-tab, #ep-new, #ep-delete").forEach((b) => (b.disabled = on));
+  if (!on) renderEndpoints();
+  if (on) { const bar = $("bar"); bar.classList.remove("run"); void bar.offsetWidth; bar.classList.add("run"); }
+  else $("deploy").innerHTML = ICON.up() + "Deploy";
+  refresh();
+}
+
+function showStep(i) {
+  $("steps").innerHTML = STEPS.map((s, n) =>
+    n < i ? `<li class="done">${ICON.check()}${s === "Validating" ? "Validated" : s === "Deploying" ? "Deployed" : s}</li>`
+    : n === i ? `<li class="current" aria-current="step">${ICON.spin(15)}${s}…</li>`
+    : `<li class="todo">${ICON.check()}${s}</li>`).join("");
+  $("step-hint").textContent = `Step ${i + 1} of ${STEPS.length} · the endpoint is tested automatically when this finishes`;
+  $("deploy").innerHTML = ICON.spin(20) + STEPS[i] + "…";
+}
+
+// The save itself is instant; the ~2s step sequence is deliberate UX so deploying feels like a real, confirmed step.
+async function deploy(resp) {
+  if (busy) return;
+  const target = ep;
+  setDeploying(true);
+  showStep(0);
+  const timers = [setTimeout(() => showStep(1), 700), setTimeout(() => showStep(2), 1400)];
+  try {
+    const [saved] = await Promise.all([api(base(target) + "/active", "PUT", resp), wait(2000)]);
+    timers.forEach(clearTimeout);
+    setDeploying(false);
+    updateEndpointLive(target, saved);
+    fill(saved);
+    showLive(saved);
+    const ok = await testEndpoint();
+    toast(ok ? `Deployed · /${target} now serves ${saved.method} ${saved.status} and passed its test` : `Deployed, but the endpoint test failed. See Live now.`, !ok);
+  } catch (e) {
+    timers.forEach(clearTimeout);
+    setDeploying(false);
+    toast(`Deploy failed. ${e.message}. Nothing changed; try again.`, true);
+  }
+}
+
+function deployEditor() {
+  if (busy) return;
+  const r = readEditor();
+  if (r.error) { toast(r.error + " Nothing was deployed.", true); $(r.field).focus(); return; }
+  deploy(r.value);
+}
+
+// ---------- Samples ----------
+
+let lastSamples = null;
+function showSamples(all) {
+  lastSamples = all;
+  const list = $("samples");
+  list.replaceChildren();
+  const names = Object.keys(all).sort((a, b) => a.localeCompare(b));
+  $("samples-count").textContent = names.length ? `${names.length} saved` : "";
+  if (!names.length) {
+    list.innerHTML = `<li class="empty" style="border-top:0"><div class="empty-icon">${ICON.bookmark}</div><p style="font-weight:650">No samples yet</p><p class="hint" style="font-size:13px;max-width:280px">Save responses you reuse, like an auth failure or an outage, then load or deploy them in one click.</p><button class="btn" type="button" id="empty-cta" style="height:40px">Save the current response</button></li>`;
+    $("empty-cta").onclick = () => $("name").focus();
+    return;
+  }
+  for (const name of names) {
+    const s = { method: "ANY", ...all[name] };
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="s-name"></span><div class="s-row"><div class="s-tags"><span class="tag"></span><span class="tag ${statusClass(s.status)}"></span></div><div class="s-actions"><button type="button" class="btn sm ghost">${ICON.load}Load</button><button type="button" class="btn sm soft">${ICON.up(14)}Deploy</button><button type="button" class="btn sm ghost icon-btn">${ICON.trash}</button></div></div>`;
+    // textContent / attributes only: names come from anyone with the PIN.
+    const nameEl = li.querySelector(".s-name");
+    nameEl.textContent = name;
+    nameEl.title = name;
+    const [mTag, sTag] = li.querySelectorAll(".tag");
+    mTag.textContent = s.method;
+    sTag.textContent = s.status;
+    if (sameResp(s, live)) li.querySelector(".s-tags").insertAdjacentHTML("beforeend", `<span class="tag live"><span class="dot" aria-hidden="true"></span>Live</span>`);
+    const [load, dep, del] = li.querySelectorAll("button");
+    load.setAttribute("aria-label", `Load sample ${name}`);
+    dep.setAttribute("aria-label", `Deploy sample ${name}`);
+    del.setAttribute("aria-label", `Delete sample ${name}`);
+    load.onclick = () => { fill(s); $("name").value = name; toast(`Loaded “${name}” · not deployed yet`); };
+    dep.onclick = () => { $("name").value = name; deploy({ method: s.method, status: s.status, body: s.body ?? null }); };
+    del.onclick = () => confirmDelete(name);
+    [load, dep, del].forEach((b) => (b.disabled = busy));
+    list.append(li);
+  }
+}
+
+// Styled confirm dialog; resolves true when the user picks the action.
+function ask(title, text, okLabel) {
+  const d = $("confirm");
+  $("confirm-title").textContent = title;
+  $("confirm-text").textContent = text;
+  $("confirm-ok").innerHTML = ICON.trash.replace('width="16" height="16"', 'width="15" height="15"');
+  $("confirm-ok").append(document.createTextNode(okLabel));
+  d.returnValue = "";
+  d.showModal();
+  return new Promise((resolve) => (d.onclose = () => resolve(d.returnValue === "ok")));
+}
+
+async function confirmDelete(name) {
+  if (!(await ask("Delete this sample?", `“${name}” will be removed from /${ep}. This can’t be undone.`, "Delete sample"))) return;
+  try {
+    showSamples(await api(base() + "/samples/" + encodeURIComponent(name), "DELETE"));
+    toast("Sample deleted");
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveSample() {
+  const name = $("name").value.trim();
+  if (!name) { toast("Enter a sample name.", true); $("name").focus(); return; }
+  const r = readEditor();
+  if (r.error) { toast(r.error + " Sample not saved.", true); $(r.field).focus(); return; }
+  try {
+    showSamples(await api(base() + "/samples/" + encodeURIComponent(name), "PUT", r.value));
+    toast(`Saved sample “${name}”`);
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------- Wiring ----------
+
+for (const m of METHODS) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = m;
+  b.dataset.m = m;
+  b.onclick = () => { method = m; refresh(); };
+  $("methods").append(b);
+}
+for (const c of CODES) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.dataset.code = c;
+  b.innerHTML = ICON.check(13) + c;
+  b.title = reason(c);
+  b.onclick = () => { $("status").value = c; refresh(); };
+  $("chips").append(b);
+}
+
+$("status").addEventListener("input", refresh);
+$("body").addEventListener("input", refresh);
+$("body").addEventListener("scroll", () => ($("gutter").scrollTop = $("body").scrollTop));
+$("format").onclick = () => {
+  const r = readEditor();
+  if (r.field === "body") { toast(r.error, true); return; }
+  const text = $("body").value.trim();
+  if (text) $("body").value = JSON.stringify(JSON.parse(text), null, 2);
+  refresh();
+  toast("JSON formatted");
+};
+$("deploy").onclick = deployEditor;
+$("save").onclick = saveSample;
+$("name").addEventListener("keydown", (e) => e.key === "Enter" && saveSample());
+$("test").onclick = () => testEndpoint().catch((e) => toast(e.message, true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); deployEditor(); }
+});
+
+const copyLabel = () => { $("copy").className = "btn"; $("copy").innerHTML = ICON.copy + "Copy URL"; $("url").classList.remove("copied"); };
+copyLabel();
+$("copy").onclick = () => navigator.clipboard.writeText(epUrl()).then(() => {
+  $("copy").className = "btn ok";
+  $("copy").innerHTML = ICON.check(16) + "Copied";
+  $("url").classList.add("copied");
+  setTimeout(copyLabel, 1800);
+});
+
+function paintTheme() {
+  const dark = document.documentElement.dataset.theme !== "light";
+  $("theme").innerHTML = dark ? ICON.sun : ICON.moon;
+  $("theme").setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  $("theme").title = $("theme").getAttribute("aria-label");
+}
+$("theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch {}
+  paintTheme();
+};
+paintTheme();
+$("deploy").innerHTML = ICON.up() + "Deploy";
+
+// ---------- Endpoints ----------
+
+function updateEndpointLive(slug, resp) {
+  const e = endpoints.find((x) => x.slug === slug);
+  if (e) e.live = resp;
+  renderEndpoints();
+}
+
+function renderEndpoints() {
+  const tabs = $("ep-tabs");
+  tabs.replaceChildren();
+  for (const e of endpoints) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ep-tab";
+    b.setAttribute("aria-pressed", e.slug === ep);
+    b.textContent = "/" + e.slug;
+    const tag = document.createElement("span");
+    tag.className = "tag " + statusClass(e.live.status);
+    tag.textContent = `${e.live.method || "ANY"} ${e.live.status}`;
+    b.append(tag);
+    b.onclick = () => switchTo(e.slug);
+    tabs.append(b);
+  }
+  const full = endpoints.length >= MAX_ENDPOINTS;
+  $("ep-count").textContent = `${endpoints.length} of ${MAX_ENDPOINTS} used`;
+  $("ep-new").disabled = full;
+  $("ep-new").title = full ? `Limit reached: at most ${MAX_ENDPOINTS} endpoints. Delete one to add another.` : "";
+  $("ep-delete").disabled = endpoints.length <= 1;
+  $("ep-delete").setAttribute("aria-label", `Delete endpoint /${ep}`);
+  $("ep-delete").title = endpoints.length <= 1 ? "The last endpoint can’t be deleted" : `Delete endpoint /${ep}`;
+}
+
+async function switchTo(slug, { skipCheck } = {}) {
+  if (busy || (slug === ep && !skipCheck)) return;
+  const r = readEditor();
+  const dirty = live && (r.error || !sameResp(r.value, live));
+  if (!skipCheck && dirty && !(await ask("Discard unsaved edits?", `Your edits to /${ep} aren’t deployed. Switching to /${slug} discards them.`, "Discard & switch"))) return;
+  ep = slug;
+  try { history.replaceState(null, "", "#" + slug); localStorage.setItem("endpoint", slug); } catch {}
+  $("url").value = epUrl();
+  $("result").hidden = true;
+  $("name").value = "";
+  renderEndpoints();
+  try {
+    const [l, all] = await Promise.all([api(base() + "/active"), api(base() + "/samples")]);
+    if (ep !== slug) return; // user switched again meanwhile
+    showLive(l);
+    fill(l);
+    showSamples(all);
+  } catch (e) { toast(e.message, true); }
+}
+
+$("ep-new").onclick = () => {
+  $("new-ep-prefix").textContent = location.host + "/";
+  $("new-ep-slug").value = "";
+  $("new-ep-error").hidden = true;
+  $("new-ep-row").classList.remove("invalid");
+  $("new-ep-left").textContent = `${MAX_ENDPOINTS - endpoints.length} of ${MAX_ENDPOINTS} left.`;
+  $("new-ep").showModal();
+};
+$("new-ep-cancel").onclick = () => $("new-ep").close();
+$("new-ep-slug").addEventListener("input", () => {
+  // Nudge input toward a valid slug as the user types.
+  $("new-ep-slug").value = $("new-ep-slug").value.toLowerCase().replace(/[\s_]+/g, "-");
+  $("new-ep-row").classList.remove("invalid");
+  $("new-ep-error").hidden = true;
+});
+$("new-ep-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const slug = $("new-ep-slug").value.trim();
+  try {
+    endpoints = await api("/api/endpoints", "POST", { slug });
+    $("new-ep").close();
+    await switchTo(slug, { skipCheck: true });
+    toast(`Created /${slug}`);
+  } catch (err) {
+    $("new-ep-row").classList.add("invalid");
+    setError("new-ep-error", err.message);
+    $("new-ep-slug").focus();
+  }
+};
+
+$("ep-delete").onclick = async () => {
+  if (busy || endpoints.length <= 1) return;
+  const slug = ep;
+  if (!(await ask(`Delete /${slug}?`, `Its live response and all its samples will be removed, and ${epUrl(slug)} will stop answering. This can’t be undone.`, "Delete endpoint"))) return;
+  try {
+    endpoints = await api(base(slug), "DELETE");
+    await switchTo(endpoints[0].slug, { skipCheck: true });
+    toast(`Deleted /${slug}`);
+  } catch (e) { toast(e.message, true); }
+};
+$("ep-delete").innerHTML = ICON.trash;
+
+(async () => {
+  try {
+    endpoints = await api("/api/endpoints");
+    let saved = null;
+    try { saved = localStorage.getItem("endpoint"); } catch {}
+    const want = [location.hash.slice(1), saved].find((s) => endpoints.some((e) => e.slug === s));
+    await switchTo(want || endpoints[0].slug, { skipCheck: true });
+  } catch (e) { toast(e.message, true); }
+})();
+</script>
+</body>
+</html>

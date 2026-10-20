@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock Server · Unlock</title>
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") || "dark"; } catch {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root, [data-theme="dark"] { color-scheme: dark; --bg: #0F0F12; --surface: #17171C; --surface-2: #1E1E25; --border: #2A2A33; --border-strong: #3A3A45; --text: #ECECF1; --muted: #A3A3AF; --accent: #5B55F0; --on-accent: #FFFFFF; --warn: #FBBF24; --warn-soft: #2E240C; --err: #F87171; --err-soft: #361818; --inverse: #ECECF1; --on-inverse: #17171C; --shadow: rgba(0,0,0,.35); }
+  [data-theme="light"] { color-scheme: light; --bg: #F6F6F7; --surface: #FFFFFF; --surface-2: #F2F2F4; --border: #E3E3E8; --border-strong: #C9C9D1; --text: #18181B; --muted: #5E5E69; --accent: #4338CA; --on-accent: #FFFFFF; --warn: #9A4A00; --warn-soft: #FFF4E0; --err: #B42318; --err-soft: #FDEDEC; --inverse: #18181B; --on-inverse: #FAFAFA; --shadow: rgba(20,20,30,.06); }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px/1.45 'Inter', system-ui, sans-serif; }
+  button, input { font: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  main { flex: 1 0 auto; display: flex; align-items: center; justify-content: center; padding: 48px 16px; }
+  form { width: 100%; max-width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 36px 32px 28px; display: flex; flex-direction: column; gap: 22px; box-shadow: 0 1px 2px var(--shadow), 0 12px 32px var(--shadow); }
+  @media (max-width: 480px) { form { padding: 28px 20px 24px; } }
+  .head { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+  .logo { width: 48px; height: 48px; border-radius: 12px; background: var(--inverse); color: var(--on-inverse); display: flex; align-items: center; justify-content: center; }
+  h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .head p { margin: 4px 0 0; color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  #pin { height: 48px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface); color: var(--text); font: 20px 'JetBrains Mono', monospace; letter-spacing: .4em; }
+  #pin[aria-invalid="true"] { border: 2px solid var(--err); }
+  #pin:disabled { border-style: dashed; background: var(--surface-2); color: var(--muted); font: 15px 'Inter', sans-serif; letter-spacing: 0; cursor: not-allowed; }
+  #go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 48px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 15px; font-weight: 650; cursor: pointer; }
+  #go:disabled { border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--muted); font-weight: 600; cursor: not-allowed; }
+  .error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 8px; background: var(--err-soft); color: var(--err); font-size: 13px; font-weight: 500; }
+  .error svg, .notes svg { flex: none; margin-top: 1px; }
+  .attempts { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  .attempts .segs { display: flex; gap: 4px; }
+  .attempts .segs span { width: 22px; height: 5px; border-radius: 3px; background: var(--border-strong); }
+  .attempts .segs span.used { background: var(--err); }
+  .attempts small { font-size: 12px; color: var(--muted); }
+  .locked { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-soft); }
+  .locked-title { display: flex; align-items: center; gap: 8px; color: var(--warn); font-weight: 650; }
+  .locked p { margin: 0; font-size: 13px; }
+  .count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .count span:first-child { font-size: 12px; font-weight: 600; color: var(--muted); }
+  #clock { font: 600 30px 'JetBrains Mono', monospace; color: var(--warn); letter-spacing: .02em; }
+  .bar { height: 6px; border-radius: 3px; background: var(--border-strong); overflow: hidden; }
+  .bar div { height: 100%; border-radius: 3px; background: var(--warn); transition: width 1s linear; }
+  .notes { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .notes p { margin: 0; display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); }
+  footer { padding: 20px 24px 28px; text-align: center; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <form id="form" novalidate>
+    <div class="head">
+      <div class="logo"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/></svg></div>
+      <div>
+        <h1>Mock Server</h1>
+        <p>Enter your PIN to unlock the console.</p>
+      </div>
+    </div>
+
+    <div class="locked" id="locked" role="alert" hidden>
+      <div class="locked-title"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Too many attempts</div>
+      <p>Unlocking is paused on this device after 5 wrong PINs. It comes back on its own.</p>
+      <div class="count"><span>Try again in</span><span id="clock" aria-live="polite">1:00</span></div>
+      <div class="bar" aria-hidden="true"><div id="lock-bar" style="width:100%"></div></div>
+    </div>
+
+    <div class="field">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" aria-describedby="pin-error" autofocus>
+      <div id="pin-error" class="error" role="alert" hidden></div>
+      <div class="attempts" id="attempts" hidden><div class="segs" aria-hidden="true"></div><small></small></div>
+    </div>
+
+    <button id="go" type="submit"></button>
+
+    <div class="notes">
+      <p><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>You stay signed in for 7 days on this device.</p>
+      <p><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8v.01"/></svg>Only this console is locked. The mock endpoint stays public.</p>
+    </div>
+  </form>
+</main>
+<footer>Built with ❤️ by Niaz</footer>
+<script>
+const $ = (id) => document.getElementById(id);
+const LOCK = '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const UNLOCK = '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>';
+const X = '<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>';
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+let timer;
+
+function setUnlock() { $("go").innerHTML = UNLOCK + "Unlock"; }
+
+function showError(text, used, max) {
+  $("pin").setAttribute("aria-invalid", "true");
+  const e = $("pin-error");
+  e.hidden = false;
+  e.innerHTML = X + "<span></span>";
+  e.querySelector("span").textContent = text;
+  if (used == null) { $("attempts").hidden = true; return; }
+  $("attempts").hidden = false;
+  $("attempts").querySelector(".segs").innerHTML = Array.from({ length: max }, (_, i) => `<span class="${i < used ? "used" : ""}"></span>`).join("");
+  $("attempts").querySelector("small").textContent = `${used} of ${max} attempts used`;
+}
+
+function clearError() {
+  $("pin").removeAttribute("aria-invalid");
+  $("pin-error").hidden = true;
+  $("attempts").hidden = true;
+}
+
+function lockFor(seconds) {
+  clearInterval(timer);
+  clearError();
+  $("locked").hidden = false;
+  $("pin").disabled = true;
+  $("pin").value = "";
+  $("pin").placeholder = "Locked";
+  $("go").disabled = true;
+  const total = 60, end = Date.now() + seconds * 1000;
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    $("clock").textContent = mmss(left);
+    $("clock").setAttribute("aria-label", `${left} seconds remaining`);
+    $("lock-bar").style.width = (left / total) * 100 + "%";
+    $("go").innerHTML = LOCK + `Locked · <span class="mono">${mmss(left)}</span>`;
+    if (left > 0) return;
+    clearInterval(timer);
+    $("locked").hidden = true;
+    $("pin").disabled = false;
+    $("pin").placeholder = "";
+    $("go").disabled = false;
+    setUnlock();
+    $("pin").focus();
+  };
+  tick();
+  timer = setInterval(tick, 1000);
+}
+
+$("pin").addEventListener("input", () => $("pin").removeAttribute("aria-invalid"));
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  if (!$("pin").value) { showError("Enter your PIN."); $("pin").focus(); return; }
+  try {
+    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: $("pin").value }) });
+    if (r.ok) return location.replace("/");
+    const out = await r.json().catch(() => ({}));
+    $("pin").value = "";
+    if (r.status === 429) return lockFor(out.retryAfter || 60);
+    const max = out.maxAttempts || 5;
+    const left = out.attemptsLeft ?? null;
+    showError(left == null ? out.error || "Login failed" : `Wrong PIN. ${left} attempt${left === 1 ? "" : "s"} left before a 60-second lock.`, left == null ? null : max - left, max);
+    $("pin").focus();
+  } catch {
+    showError("Couldn’t reach the server. Try again.");
+  }
+};
+
+setUnlock();
+</script>
+</body>
+</html>
